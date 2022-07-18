@@ -1,0 +1,81 @@
+install.packages('tidyverse')
+library(tidyverse)
+library(vroom)
+library(skimr)
+# collapse data into 4 parts
+cyclis_04052022_df <- vroom(c("202205_bike_tripdata.csv","202204_bike_tripdata.csv"))
+cyclis_01032022_df <- vroom(c("202201_bike_tripdata.csv","202202_bike_tripdata.csv","202203_bike_tripdata.csv"))
+cyclis_10122021_df <- vroom(c("202110_bike_tripdata.csv","202111_bike_tripdata.csv","202112_bike_tripdata.csv"))
+cyclis_07092021_df <- vroom(c("202107_bike_tripdata.csv","202108_bike_tripdata.csv","202109_bike_tripdata.csv"))
+cyclis_05062021_df <- vroom(c("202105_bike_tripdata.csv","202106_bike_tripdata.csv"))
+
+# skim all data to identify missing value, format data, and unique value
+skim_without_charts(cyclis_04052022_df)
+skim_without_charts(cyclis_01032022_df)
+skim_without_charts(cyclis_10122021_df)
+skim_without_charts(cyclis_07092021_df)
+skim_without_charts(cyclis_05062021_df)
+
+# omit all missing
+cyclis_05062021_df <- na.omit(cyclis_05062021_df)
+cyclis_07092021_df <- na.omit(cyclis_07092021_df)
+cyclis_10122021_df <- na.omit(cyclis_10122021_df)
+cyclis_01032022_df <- na.omit(cyclis_01032022_df)
+cyclis_04052022_df <- na.omit(cyclis_04052022_df)
+
+# export files
+write.csv(cyclis_05062021_df, file="cyclis_05062021_df")
+write.csv(cyclis_07092021_df, file="cyclis_07092021_df")
+write.csv(cyclis_10122021_df, file="cyclis_10122021_df.csv")
+write.csv(cyclis_01032022_df, file="cyclis_01032022_df.csv")
+write.csv(cyclis_04052022_df, file="cyclis_04052022_df.csv")
+# take all lat and lng station
+cyclis_station_geo <- cyclis_05062021_df %>% select(start_lat,start_lng,
+                                                    end_lat,end_lng, member_casual)
+cyclis_station_geo <- rbind(cyclis_station_geo, cyclis_07092021_df[9:13])
+cyclis_station_geo <- rbind(cyclis_station_geo, cyclis_10122021_df[9:13])
+cyclis_station_geo <- rbind(cyclis_station_geo, cyclis_01032022_df[9:13])
+cyclis_station_geo <- rbind(cyclis_station_geo, cyclis_04052022_df[9:13])
+
+# Calculate distance 
+# Load package geosphere
+install.packages("geosphere")
+library(geosphere)
+#use Geo Distance Function
+cyclis_station_geo <- cyclis_station_geo %>% 
+  mutate (geo_dist = (distGeo(cbind(start_lng,start_lat),cbind(end_lng,end_lat))))
+
+head(cyclis_station_geo)
+write.csv(cyclis_station_geo, file="cyclis_station_geo.csv")
+library(ggplot2)
+# plotting distance
+ggplot(cyclis_station_geo) + geom_boxplot(aes(member_casual, geo_dist), fill = c("blue","red"))
+cyclis_station_geo %>% group_by(member_casual) %>% summarize(member_median = format(round(median(geo_dist),3),nsmall=3))
+# remove outlier (there is only one outlier in this data, we can suspect it for
+# cycle thieve, or GPS error; either way, this value is considered useless)
+cyclis_iqr <- IQR(cyclis_station_geo$geo_dist)
+cyclis_station_geo <- subset(cyclis_station_geo,cyclis_station_geo$geo_dist > (896.2-1.5 * cyclis_iqr) & cyclis_station_geo$geo_dist < (2793.3 + 1.5*cyclis_iqr))
+write.csv(cyclis_station_geo, file="cyclis_station_geo.csv")
+head(cyclis_04052022_df)
+# Based on datetime data structure, i conclude that cyclis is cross-section data, 
+# main reason because it doesn't really trying to depict one variable overtime,
+# rather this data is just listing all order based on ride_id
+# Descriptive Statistic of cyclis_station_geo
+summary(cyclis_station_geo)
+hist(cyclis_station_geo$start_lat)
+hist(cyclis_station_geo$start_lng)
+hist(cyclis_station_geo$end_lat)
+hist(cyclis_station_geo$end_lng)
+hist(cyclis_station_geo$geo_dist)
+# There is an indication that the geo_dist data is not normally distributed.
+# Proceed, to perform histogram and Kolmogorov-Smirnov test for normality
+hist(cyclis_station_geo$geo_dist)
+ks.test(cyclis_station_geo$geo_dist,'pnorm')
+# These two tests formallu prove that geo_dist is not normally distributed.
+# because of its large sample size, t-test still relevant in this data, despite the distribution
+geo_dist_casual <- cyclis_station_geo %>% filter(member_casual == 'casual') %>% select(geo_dist)
+geo_dist_member <- cyclis_station_geo %>% filter(member_casual == 'member') %>% select(geo_dist)
+
+# Use Welch's Test (becuase equal variance unassumed)
+t.test(geo_dist_casual,geo_dist_member, var.equal=FALSE)
+t.test(cyclis_station_geo$geo_dist~cyclis_station_geo$member_casual, var.equal=FALSE)
