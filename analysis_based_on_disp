@@ -1,0 +1,91 @@
+# load data
+cyclis_station <- read.csv("cyclis_station_geo.csv")
+# load neccesary library
+install.packages("tidyverse")
+library(tidyverse)
+library(ggplot2)
+# summarize the data
+head(cyclis_station)
+str(cyclis_station)
+summary(cyclis_station)
+cyclis_station <- cyclis_station[-1]
+# check all variables variance
+for(i in seq_along(cyclis_station)){
+  if(class(cyclis_station[,i]) %in% c("numeric","integer")){
+    print(sd(cyclis_station[,i]))
+  }else{
+    print("non-numeric")
+  }
+}
+
+# check data distribution with histogram plot using Hmisc package
+install.packages("Hmisc")
+library(Hmisc)
+library(scales)
+hist.data.frame(cyclis_station[-5])
+#try plot bar to calculate total user 
+cyclis_station %>% count(member_casual=='casual')
+#barplot for total user by user category
+ggplot(cyclis_station,aes(member_casual,fill=member_casual))+geom_bar() +
+  geom_text(aes(label=..count..), stat="count", vjust=1.5, position=position_dodge(.9))+
+  labs(x="User Category", y="Total User") +
+  ggtitle("Total Cyclis User (in million)", "as of May,2022")+
+  scale_y_continuous(labels= label_number(suffix = " M", scale=1e-6))+
+  theme(legend.position="none")
+
+# check how much zero cycling distance
+zero_geo_dist <- cyclis_station %>% filter(geo_dist==0)
+head(zero_geo_dist)
+summary(zero_geo_dist)
+hist.data.frame(zero_geo_dist)
+# by looking at the histogram, zero distance cycling only seem to only happen with casual user
+# count the user
+zero_geo_dist %>% count(member_casual=='casual')
+write.csv(zero_geo_dist, file="zero_geo_dist.csv")
+# total user by user category in zero cycling distance
+ggplot(zero_geo_dist,aes(member_casual,fill=member_casual))+geom_bar() +
+  geom_text(aes(label=..count..), stat="count", vjust=1.5, position=position_dodge(.9))+
+  labs(x="User Category", y="Total User") +
+  ggtitle("Number of Zero Cycling Distance User (in million)", "as of May,2022")+
+  scale_y_continuous(labels= label_number(suffix = " K", scale=0.001))+
+  theme(legend.position="none")
+# Zero distance cycling represents interesting insight. 
+# This data show us that there are some users who stop at the same station where they started
+# For now, we call this cycling as 'round-back user'
+
+# For non-zero cycling distance, i called it 'travel user'
+# I will analyze the user difference based on this type of travelling route
+nonzero_geo_dist <- cyclis_station %>% filter(geo_dist !=0)
+write.csv(nonzero_geo_dist, file="nonzero_geo_dist.csv")
+# try to summarize this non-zero  geo distance data
+summary(nonzero_geo_dist)
+hist.data.frame(nonzero_geo_dist[-5])
+# focus on geo_dist variable, we seek to analyze the difference of cycling distance 
+# between user group 
+# plot geo_dist with boxplot by member_casual
+ggplot(nonzero_geo_dist) + geom_boxplot(aes(member_casual,geo_dist), fill=c('blue','green'))
+# try violin plot
+ggplot(nonzero_geo_dist, aes(member_casual, geo_dist)) + 
+  geom_violin(aes(fill=member_casual))+
+  geom_boxplot(width=0.1)
+
+# Based on violin plot, we can see median difference in cycling distance between member and casual user
+# From this plot, it safe for us to hypothesize that the average cycling distance of member and casual user is statistically different.
+# to prove our hypothesis, we can use T-test
+# Let's divide the geo_dist into two user groups
+# The reason, because we have enough large sample size, that T-Test is feasible for
+# non-normal distributed data
+
+# First, let's create two sample of geo_dist divided by member status
+nonzero_member_geo <- nonzero_geo_dist %>% filter(member_casual=='member') %>% 
+  select(geo_dist)
+nonzero_casual_geo <- nonzero_geo_dist %>% filter(member_casual=='casual') %>% 
+  select(geo_dist)
+
+t.test(nonzero_member_geo,nonzero_casual_geo, paired = FALSE, var.equal=FALSE)
+
+# the test result is sufficient to reject H0, and that prove our hypothesis that 
+# there are significant difference on the average of cycling distance between
+# member and casual user, where casual user cycling farther than member user 
+mean(nonzero_member_geo$geo_dist)
+mean(nonzero_casual_geo$geo_dist)
