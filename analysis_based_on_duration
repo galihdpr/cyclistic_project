@@ -1,0 +1,589 @@
+# load all data
+cyclis_05062021_df <- vroom("cyclis_05062021_df.csv")
+cyclis_07092021_df <- vroom("cyclis_07092021_df.csv")
+cyclis_10122021_df <- vroom("cyclis_10122021_df.csv")
+cyclis_01032022_df <- vroom("cyclis_01032022_df.csv")
+cyclis_04052022_df <- vroom("cyclis_04052022_df.csv")
+
+# define all columns
+str(cyclis_04052022_df)
+
+# take rideable_type, started_at, ended_at, member_casual
+cyclis_durtime <- cyclis_05062021_df[c(3:5,14)]
+cyclis_durtime <- rbind(cyclis_durtime, cyclis_07092021_df[c(3:5,14)])
+cyclis_durtime <- rbind(cyclis_durtime, cyclis_10122021_df[c(3:5,14)])
+cyclis_durtime <- rbind(cyclis_durtime, cyclis_01032022_df[c(3:5,14)])
+cyclis_durtime <- rbind(cyclis_durtime, cyclis_04052022_df[c(3:5,14)])
+
+# check for any missing value
+sum(is.na(cyclis_durtime))
+
+# write csv with fwrite
+library(data.table)
+library(vroom)
+library(tidyverse)
+fwrite(cyclis_durtime, file="cyclis_durtime.csv", sep=",")
+cyclis_durtime <- vroom("cyclis_durtime.csv")
+head(cyclis_durtime)
+str(cyclis_durtime)
+
+# summarize ride type
+cyclis_durtime %>% group_by(rideable_type) %>% summarise(count=n()) %>% 
+  mutate(prop=count/sum(count))
+
+# load lubridate
+library(lubridate)
+# check if all cyling done in same day
+sum(date(cyclis_durtime$started_at) == date(cyclis_durtime$ended_at))
+# calculate cycling duration
+cyclis_durtime <-cyclis_durtime %>% mutate(cyclis_dur = difftime(ended_at,started_at, units ="secs"))
+#convert difftime to numeric
+cyclis_durtime$cyclis_dur<-as.double.difftime(cyclis_durtime$cyclis_dur)
+head(cyclis_durtime)
+summary(cyclis_durtime)
+# we found negative duration in cycling duration.
+# Because it doesn't make sense to have negative duration, we can erase it
+# There are 112 ride data with negative duration
+cyclis_durtime <- cyclis_durtime %>% filter(cyclis_dur > 0)
+summary(cyclis_durtime)
+sd(cyclis_durtime$cyclis_dur)
+#based on data summary,there is high chance that this duration data has outlier
+boxplot(cyclis_durtime$cyclis_dur)
+# Find the outliers
+durtime_iqr <- IQR(cyclis_durtime$cyclis_dur)
+cyclis_durtime_nooutlier <- subset(cyclis_durtime, cyclis_durtime$cyclis_dur > (401-1.5*durtime_iqr) & cyclis_durtime$cyclis_dur < (707+1.5*durtime_iqr))
+
+
+# Check the first group data after cleaning
+summary(cyclis_durtime_nooutlier)
+boxplot(cyclis_durtime_nooutlier$cyclis_dur)
+hist(cyclis_durtime_nooutlier$cyclis_dur)
+first_iqr <- IQR(cyclis_durtime_nooutlier$cyclis_dur)
+cyclis_durtime_nooutlier <- subset(cyclis_durtime_nooutlier, 
+                                   cyclis_durtime_nooutlier$cyclis_dur > (368-1.5*first_iqr) & 
+                                     cyclis_durtime_nooutlier$cyclis_dur < (1002+1.5*first_iqr))
+summary(cyclis_durtime_nooutlier)
+boxplot(cyclis_durtime_nooutlier$cyclis_dur)
+hist(cyclis_durtime_nooutlier$cyclis_dur)
+
+#Called it 1up997sec group
+cyclis_1up997sec_durgroup <- cyclis_durtime_nooutlier
+summary(cyclis_1up997sec_durgroup$cyclis_dur)
+cyclis_1up1952sec_durgroup <- cyclis_1up997sec_durgroup
+fwrite(cyclis_1up1952sec_durgroup, file="cyclis_1up1952sec_durgroup.csv", sep = ",")
+ggplot(cyclis_1up1952sec_durgroup, aes(cyclis_dur)) + 
+  geom_histogram() +
+  ggtitle("Cyclistic Usage Duration Distribution","1-1952 seconds")
+#analyze the outlier from first group to see if there is some pattern
+cyclis_durtime_outlier <- subset(cyclis_durtime, 
+                                 cyclis_durtime$cyclis_dur < (401-1.5*durtime_iqr) | 
+                                   cyclis_durtime$cyclis_dur > (707+1.5*durtime_iqr))
+
+boxplot(cyclis_durtime_outlier$cyclis_dur)
+summary(cyclis_durtime_outlier)
+second_iqr <- IQR(cyclis_durtime_outlier$cyclis_dur)
+cyclis_non_outlier_second <- subset(cyclis_durtime_outlier, 
+                                   cyclis_durtime_outlier$cyclis_dur>(2383 - 1.5*second_iqr) & 
+                                   cyclis_durtime_outlier$cyclis_dur<(4497 + 1.5*second_iqr))
+#Analyze second durtime group
+summary(cyclis_non_outlier_second)
+hist(cyclis_non_outlier_second$cyclis_dur)
+boxplot(cyclis_non_outlier_second$cyclis_dur)
+
+# there are still lot of outliers in cyclis_outlier
+third_iqr <- IQR(cyclis_non_outlier_second$cyclis_dur)
+summary(cyclis_non_outlier_second$cyclis_dur)
+cyclis_non_outlier_second <- subset(cyclis_non_outlier_second, 
+                                    cyclis_non_outlier_second$cyclis_dur>(2308 - 1.5*third_iqr) & 
+                                      cyclis_non_outlier_second$cyclis_dur<(3516 + 1.5*third_iqr))
+boxplot(cyclis_non_outlier_second$cyclis_dur)
+
+# we cleaned to optimal state This group will called as cyclis_20315326sec_dur
+cyclis_2031up5326sec_durgroup <- cyclis_non_outlier_second
+summary(cyclis_2031up5326sec_durgroup$cyclis_dur)
+fwrite(cyclis_2031up5326sec_durgroup, file="cyclis_2031up5236sec_durgroup.csv", sep = ",")
+ggplot(cyclis_2031up5326sec_durgroup, aes(cyclis_dur))+
+  geom_histogram(fill="blue")+
+  ggtitle("Cyclistic Usage Duration Distribution","2031-5236 seconds")
+
+
+# Now, we further the anaylsis of outlier from second group
+cyclis_outlier_from_second <- subset(cyclis_durtime_outlier, 
+                                     cyclis_durtime_outlier$cyclis_dur<(2383 - 1.5*second_iqr) |
+                                        cyclis_durtime_outlier$cyclis_dur>(4497 + 1.5*second_iqr))
+
+summary(cyclis_outlier_from_second$cyclis_dur)
+boxplot(cyclis_outlier_from_second$cyclis_dur)
+# We clean up this group
+fourth_iqr <- IQR(cyclis_outlier_from_second$cyclis_dur)
+cyclis_non_outlier_third <- subset(cyclis_outlier_from_second,
+                               cyclis_outlier_from_second$cyclis_dur>(8472 - 1.5*fifth_iqr) &
+                                 cyclis_outlier_from_second$cyclis_dur<(11448 + 1.5*fourth_iqr))
+
+summary(cyclis_non_outlier_third$cyclis_dur)
+boxplot(cyclis_non_outlier_third$cyclis_dur)
+fifth_iqr <- IQR(cyclis_non_outlier_third$cyclis_dur)
+cyclis_non_outlier_third <- subset(cyclis_non_outlier_third,
+                                   cyclis_non_outlier_third$cyclis_dur>(8365 - 1.5*fifth_iqr) &
+                                     cyclis_non_outlier_third$cyclis_dur<(10668 + 1.5*fifth_iqr))
+
+# Data cleaned. We called it cyclis_8365up10668sec_durtime
+cyclis_8365up10668sec_durtime <- cyclis_non_outlier_third
+summary(cyclis_8365up10668sec_durtime$cyclis_dur)
+cyclis_8365up14120sec_durtime <- cyclis_8365up10668sec_durtime
+ggplot(cyclis_8365up14120sec_durtime, aes(cyclis_dur))+
+  geom_histogram(fill="green")+
+  ggtitle("Cyclistic Usage Duration Distribution","2H19M - 3H55M")
+fwrite(cyclis_8365up14120sec_durtime, file="cyclis_8365up14120sec_durtime.csv", sep = ",")
+
+# Split for the outlier from third group
+cyclis_outlier_from_third <- subset(cyclis_outlier_from_second,
+                               cyclis_outlier_from_second$cyclis_dur<(8634 - 1.5*fourth_iqr) |
+                                 cyclis_outlier_from_second$cyclis_dur>(13772 + 1.5*fourth_iqr))
+#analyze outlier from thir group
+boxplot(cyclis_outlier_from_third$cyclis_dur)
+#clean up the outlier from third
+summary(cyclis_outlier_from_third$cyclis_dur)
+sixth_iqr <- IQR(cyclis_outlier_from_third$cyclis_dur)
+cyclis_non_outlier_fourth <- subset(cyclis_outlier_from_third,
+                                    cyclis_outlier_from_third$cyclis_dur>(30362 - 1.5*sixth_iqr)&
+                                      cyclis_outlier_from_third$cyclis_dur<(71744 + 1.5*sixth_iqr))
+boxplot(cyclis_non_outlier_fourth$cyclis_dur)
+summary(cyclis_non_outlier_fourth$cyclis_dur)
+seventh_iqr <- IQR(cyclis_non_outlier_fourth$cyclis_dur)
+cyclis_non_outlier_fourth <- subset(cyclis_non_outlier_fourth,
+                                    cyclis_non_outlier_fourth$cyclis_dur>(29023 - 1.5*seventh_iqr)&
+                                      cyclis_non_outlier_fourth$cyclis_dur<(60561 + 1.5*seventh_iqr))
+hist(cyclis_non_outlier_fourth$cyclis_dur)
+
+# this group will called as cyclis_21490up107722sec_durtime
+cyclis_21490up107722sec_durtime <- cyclis_non_outlier_fourth
+summary(cyclis_21490up107722sec_durtime$cyclis_dur)
+ggplot(cyclis_21490up107722sec_durtime, aes(cyclis_dur))+
+  geom_histogram(fill="purple")+
+  ggtitle("Cyclis Usage Duration Distribution","5H58M-29H55M")
+fwrite(cyclis_21490up107722sec_durtime,file="cyclis_21490up107722sec_durtime.csv",sep = ",")
+
+
+#split the outlier from fourth
+cyclis_outlier_from_fourth <- subset(cyclis_outlier_from_third,
+                                     cyclis_outlier_from_third$cyclis_dur<(30362 - 1.5*sixth_iqr)|
+                                       cyclis_outlier_from_third$cyclis_dur>(71744 + 1.5*sixth_iqr))
+
+# ini adalah grup terakhir. 
+
+# further analysis
+user_cat_1up1952sec<- cyclis_1up1952sec_durgroup %>% group_by(member_casual) %>% 
+  summarise(total_user=n(), user_percentage=total_user/nrow(cyclis_1up1952sec_durgroup))
+user_cat_1up1952sec
+#  member_casual total_user user_percentage
+#<chr>              <int>           <dbl>
+#  1 casual           1736684           0.389
+#  2 member           2726043           0.611
+
+user_cat_2031up5236sec<- cyclis_2031up5236sec_durgroup %>% 
+  group_by(member_casual) %>% 
+  summarise(total_user=n(),user_percentage=total_user/nrow(cyclis_2031up5236sec_durgroup))
+user_cat_2031up5236sec
+## A tibble: 2 x 3
+#member_casual total_user user_percentage
+#<chr>              <int>           <dbl>
+#  1 casual            370297           0.738
+#  2 member            131513           0.262
+
+user_cat_8365up14120sec<-cyclis_8365up14120sec_durtime %>% 
+  group_by(member_casual) %>% 
+  summarise(total_user=n(), user_percentage=total_user/nrow(cyclis_8365up14120sec_durtime))
+user_cat_8365up14120sec
+#  member_casual total_user user_percentage
+# <chr>              <int>           <dbl>
+#  1 casual             36005          0.943 
+#  2 member              2162          0.0566
+
+
+user_cat_21490up107722sec<- cyclis_21490up107722sec_durtime %>% 
+  group_by(member_casual) %>% 
+  summarise(total_user=n(), user_percentage=total_user/nrow(cyclis_21490up107722sec_durtime))
+user_cat_21490up107722sec
+#   member_casual total_user user_percentage
+# <chr>              <int>           <dbl>
+#  1 casual              5483           0.873
+#  2 member               800           0.127
+
+# load data after error
+cyclis_1up1952sec_durgroup <- vroom("cyclis_1up1952sec_durgroup.csv")
+cyclis_2031up5236sec_durgroup <- vroom("cyclis_2031up5236sec_durgroup.csv")
+cyclis_8365up14120sec_durtime <- vroom("cyclis_8365up14120sec_durtime.csv")
+cyclis_21490up107722sec_durtime <- vroom("cyclis_21490up107722sec_durtime.csv")
+
+
+# Visualize
+ggplot(user_cat_1up1952sec, aes(x="",y=user_percentage, fill=member_casual))+
+  geom_col(color="black")+
+  geom_label(aes(label=paste0(round(user_percentage,2)*100,"%")),
+             position=position_stack(vjust=0.5),
+             show.legend = FALSE)+
+  coord_polar(theta="y")+
+  scale_fill_brewer()
+
+ggplot(user_cat_2031up5236sec, aes(x="",y=user_percentage, fill=member_casual))+
+  geom_col(color="black")+
+  geom_label(aes(label=paste0(round(user_percentage,2)*100,"%")),
+             position=position_stack(vjust=0.5),
+             show.legend = FALSE)+
+  coord_polar(theta="y")+
+  scale_fill_brewer()
+
+ggplot(user_cat_21490up107722sec, aes(x="",y=user_percentage, fill=member_casual))+
+  geom_col(color="black")+
+  geom_label(aes(label=paste0(round(user_percentage,2)*100,"%")),
+             position=position_stack(vjust=0.5),
+             show.legend = FALSE)+
+  coord_polar(theta="y")+
+  scale_fill_brewer()
+
+
+ggplot(user_cat_8365up14120sec, aes(x="",y=user_percentage, fill=member_casual))+
+  geom_col(color="black")+
+  geom_label(aes(label=paste0(round(user_percentage,2)*100,"%")),
+            position=position_stack(vjust=0.5),
+            show.legend = FALSE)+
+  coord_polar(theta="y")+
+  scale_fill_brewer()
+
+  
+
+# Analyze by day
+by_day_8365up14120sec <- cyclis_8365up14120sec_durtime %>% 
+  group_by(date(started_at),member_casual) %>% 
+  summarise(user_by_day = n(), user_by_log=(log(n())))
+head(by_day_8365up14120sec)
+colnames(by_day_8365up14120sec)<-c('date','user_cat','user_by_day','user_by_log')
+ggplot(by_day_8365up14120sec, aes(date,user_by_log,color=user_cat))+
+  geom_point()
+ggplot(by_day_8365up14120sec, aes(date,user_by_log,color=user_cat))+
+  geom_smooth(method = "gam")
+fwrite(by_day_8365up14120sec, file="by_day_8365up14120.csv", sep=",")
+
+by_day_1up1952sec <- cyclis_1up1952sec_durgroup %>% 
+  group_by(date(started_at),member_casual) %>% 
+  summarise(user_by_day = n(), user_by_log=(log(n())))
+head(by_day_1up1952sec)
+colnames(by_day_1up1952sec)<-c('date','user_cat','user_by_day','user_by_log')
+ggplot(by_day_1up1952sec, aes(date,user_by_log,color=user_cat))+
+  geom_point()
+ggplot(by_day_1up1952sec, aes(date,user_by_log,color=user_cat))+
+  geom_smooth(method = "gam")
+fwrite(by_day_1up1952sec, file="by_day_1up1952sec.csv",sep=",")
+
+by_day_2031up5236sec <- cyclis_2031up5236sec_durgroup %>% 
+  group_by(date(started_at),member_casual) %>% 
+  summarise(user_by_day=n(), user_by_log=log(n()))
+head(by_day_2031up5236sec)
+colnames(by_day_2031up5236sec)<-c('date','user_cat','user_by_day','user_by_log')
+ggplot(by_day_2031up5236sec, aes(date,user_by_log,color=user_cat))+
+  geom_point()
+ggplot(by_day_2031up5236sec, aes(date,user_by_log,color=user_cat))+
+  geom_smooth(method="gam")
+fwrite(by_day_2031up5236sec, file="by_day_2031up5236sec.csv", sep=",")
+
+
+by_day_21490up107722sec <- cyclis_21490up107722sec_durtime %>% 
+  group_by(date(started_at), member_casual) %>% 
+  summarise(user_by_day=n(), user_by_log=(log(n())))
+head(by_day_21490up107722sec)
+colnames(by_day_21490up107722sec)<-c('date','user_cat','user_by_day','user_by_log')
+ggplot(by_day_21490up107722sec, aes(date,user_by_log,color=user_cat))+
+  geom_point()
+ggplot(by_day_21490up107722sec, aes(date,user_by_log))+
+  geom_line(alpha=0.8)+
+  geom_smooth(method="gam")
+
+fwrite(by_day_21490up107722sec, file="by_day_21490up107722sec.csv",sep=",")
+
+
+# analysis by type of bike
+# to imporve ggplot, use package scales
+library(scales)
+by_type_1up1952sec<-cyclis_1up1952sec_durgroup %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_user=n())
+head(by_type_1up1952sec)
+by_type_1up1952sec$member_casual <- as_factor(by_type_1up1952sec$member_casual)
+ggplot(by_type_1up1952sec, aes(rideable_type, total_user))+
+  geom_col(aes(fill=member_casual))+
+  ggtitle("Cyclistic Usage By Bike Type (in thousand)","1 - 1952 seconds")+
+  geom_text(aes(label=total_user), color="white", position=position_stack(vjust=0.6))+
+  scale_y_continuous(labels = label_number(scale=0.001))+
+  theme_classic()
+
+
+
+by_type_2031up5236sec <- cyclis_2031up5236sec_durgroup %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_user=n())
+ggplot(by_type_2031up5236sec, aes(rideable_type, total_user))+
+  geom_col(aes(fill=member_casual))+
+  ggtitle("Cyclistic Usage By Bike Type (in thousand","2031 - 5236 seconds")+
+  geom_text(aes(label=total_user), color="white",position=position_stack(vjust=0.5))+
+  scale_y_continuous(labels = label_number(scale=0.001))+
+  theme_classic()
+
+
+
+by_type_21490up107722sec <- cyclis_21490up107722sec_durtime %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_user=n())
+ggplot(by_type_21490up107722sec, aes(rideable_type, total_user))+
+  geom_col(aes(fill=member_casual))+
+  ggtitle("Cyclistic Usage By Bike Type (in thousand)","21490 - 107722 seconds")+
+  geom_text(aes(label=total_user), color="black",position=position_jitter())+
+  scale_y_continuous(labels = label_number(scale=0.001))+
+  theme_classic()
+
+
+by_type_8365up14120sec <- cyclis_8365up14120sec_durtime %>% 
+  group_by(member_casual, rideable_type) %>% 
+  summarise(total_user=n())
+ggplot(by_type_8365up14120sec, aes(rideable_type, total_user))+
+  geom_col(aes(fill=member_casual))+
+  ggtitle("Cyclistic Usage By Bike Type (in thousand)","8365 - 14120 seconds")+
+  geom_text(aes(label=total_user), color="black",position=position_stack(vjust=0.1))+
+  scale_y_continuous(labels = label_number(scale=0.001))+
+  theme_classic()
+
+# use kolmogrov-smirnov to test if each group really different or not
+install.packages("dgof")
+library(dgof)
+# test 1up1920sec vs 2031up5236sec
+ks.test(cyclis_1up1952sec_durgroup$cyclis_dur,cyclis_2031up5236sec_durgroup$cyclis_dur, exact=FALSE)
+# Two-sample Kolmogorov-Smirnov test
+
+#data:  cyclis_1up1952sec_durgroup$cyclis_dur and cyclis_2031up5236sec_durgroup$cyclis_dur
+#D = 1, p-value < 2.2e-16
+
+
+
+# test 1up1920sec vs 8365up14120sec
+ks.test(cyclis_1up1952sec_durgroup$cyclis_dur, cyclis_8365up14120sec_durtime$cyclis_dur, exact = FALSE)
+#data:  cyclis_1up1952sec_durgroup$cyclis_dur and cyclis_8365up14120sec_durtime$cyclis_dur
+#D = 1, p-value < 2.2e-16
+#alternative hypothesis: two-sided
+
+# test 1up1920sec vs 21490up107722sec
+ks.test(cyclis_1up1952sec_durgroup$cyclis_dur, cyclis_21490up107722sec_durtime$cyclis_dur)
+#Two-sample Kolmogorov-Smirnov test
+
+#data:  cyclis_1up1952sec_durgroup$cyclis_dur and cyclis_21490up107722sec_durtime$cyclis_dur
+#D = 1, p-value < 2.2e-16
+#alternative hypothesis: two-sided
+
+# test 2031up5236sec vs 8365up14120sec
+ks.test(cyclis_2031up5236sec_durgroup$cyclis_dur,cyclis_8365up14120sec_durtime$cyclis_dur)
+# Two-sample Kolmogorov-Smirnov test
+
+#data:  cyclis_2031up5236sec_durgroup$cyclis_dur and cyclis_8365up14120sec_durtime$cyclis_dur
+#D = 1, p-value < 2.2e-16
+#alternative hypothesis: two-sided
+
+# test 2031up5236sec vs 21490up107722sec
+ks.test(cyclis_2031up5236sec_durgroup$cyclis_dur,cyclis_21490up107722sec_durtime$cyclis_dur)
+#   Two-sample Kolmogorov-Smirnov test
+
+#data:  cyclis_2031up5236sec_durgroup$cyclis_dur and cyclis_21490up107722sec_durtime$cyclis_dur
+#D = 1, p-value < 2.2e-16
+#alternative hypothesis: two-sided
+
+# test 8365up14120sec vs 21490up107722sec
+ks.test(cyclis_8365up14120sec_durtime$cyclis_dur,cyclis_21490up107722sec_durtime$cyclis_dur)
+#   Two-sample Kolmogorov-Smirnov test
+
+#data:  cyclis_8365up14120sec_durtime$cyclis_dur and cyclis_21490up107722sec_durtime$cyclis_dur
+#D = 1, p-value < 2.2e-16
+#alternative hypothesis: two-sided
+
+# each group indeed has different distribution
+plot(ecdf(cyclis_1up1952sec_durgroup$cyclis_dur),
+     xlim=range(c(cyclis_1up1952sec_durgroup$cyclis_dur,cyclis_2031up5236sec_durgroup$cyclis_dur)),
+     col="blue")
+plot(ecdf(cyclis_2031up5236sec_durgroup$cyclis_dur),
+     add=TRUE,
+     lty="dashed",
+     col="red")
+
+plot(ecdf(cyclis_1up1952sec_durgroup$cyclis_dur),
+     xlim=range(c(cyclis_1up1952sec_durgroup$cyclis_dur,cyclis_8365up14120sec_durtime$cyclis_dur)),
+     col="blue")
+plot(ecdf(cyclis_8365up14120sec_durtime$cyclis_dur),
+     add=TRUE,
+     lty="dashed",
+     col="red")
+
+plot(ecdf(cyclis_1up1952sec_durgroup$cyclis_dur),
+     xlim=range(c(cyclis_1up1952sec_durgroup$cyclis_dur,cyclis_21490up107722sec_durtime$cyclis_dur)),
+     col="blue")
+plot(ecdf(cyclis_21490up107722sec_durtime$cyclis_dur),
+     add=TRUE,
+     lty="dashed",
+     col="red")
+
+plot(ecdf(cyclis_2031up5236sec_durgroup$cyclis_dur),
+     xlim=range(c(cyclis_2031up5236sec_durgroup$cyclis_dur,cyclis_8365up14120sec_durtime$cyclis_dur)),
+     col="blue")
+plot(ecdf(cyclis_8365up14120sec_durtime$cyclis_dur),
+     add=TRUE,
+     lty="dashed",
+     col="red")
+
+
+plot(ecdf(cyclis_2031up5236sec_durgroup$cyclis_dur),
+     xlim=range(c(cyclis_2031up5236sec_durgroup$cyclis_dur,cyclis_21490up107722sec_durtime$cyclis_dur)),
+     col="blue")
+plot(ecdf(cyclis_21490up107722sec_durtime$cyclis_dur),
+     add=TRUE,
+     lty="dashed",
+     col="red")
+
+
+plot(ecdf(cyclis_8365up14120sec_durtime$cyclis_dur),
+     xlim=range(c(cyclis_8365up14120sec_durtime$cyclis_dur,cyclis_21490up107722sec_durtime$cyclis_dur)),
+     col="blue")
+plot(ecdf(cyclis_21490up107722sec_durtime$cyclis_dur),
+     add=TRUE,
+     lty="dashed",
+     col="red")
+
+by_type_1up1952sec
+by_type_2031up5236sec
+by_type_8365up14120sec
+by_type_21490up107722sec
+head(cyclis_1up1952sec_durgroup)
+
+
+# analyze by time user
+
+head(cyclis_8365up14120sec_durtime)
+by_time_8365up14120sec <- cyclis_8365up14120sec_durtime %>% 
+  group_by(year(started_at),month(started_at,label=TRUE),day(started_at),
+           wday(started_at, label=TRUE),member_casual) %>% 
+  summarise(total_user=n())
+by_mean_time_8365up14120sec <- by_time_8365up14120sec %>% 
+  group_by(day_of_week,cat_user) %>% summarise(average=mean(total_user))
+by_mean_time_8365up14120sec
+colnames(by_time_8365up14120sec)<-c("year","month","day_of_month","day_of_week","cat_user","total_user")
+ggplot(by_mean_time_8365up14120sec, aes(day_of_week,average,group=cat_user))+
+  geom_col(aes(fill=cat_user),position="dodge")+
+  geom_text(aes(y=average,label=round(average)),vjust=0,hjust=0.8,position="nudge", color="white")+
+  ggtitle("Cyclistic User Average by Week Days","8365 - 14120 second")+
+  theme_dark()
+
+by_time_1up1952sec <- cyclis_1up1952sec_durgroup %>% 
+  group_by(year(started_at),month(started_at,label=TRUE),day(started_at),
+           wday(started_at, label=TRUE),member_casual) %>% 
+  summarise(total_user=n())
+by_mean_time_1up1952sec <- by_time_1up1952sec %>% 
+  group_by(day_of_week,cat_user) %>% summarise(average=mean(total_user))
+colnames(by_time_1up1952sec)<-c("year","month","day_of_month","day_of_week","cat_user","total_user")
+ggplot(by_mean_time_1up1952sec, aes(day_of_week,average,group=cat_user))+
+  geom_col(aes(fill=cat_user))+
+  geom_text(aes(y=average+3,label=round(average)),vjust=-1,position=position_stack(0), color="white",size=4)+
+  ggtitle("Cyclistic User Average by Week Days","1 - 1952 second")+
+  theme_dark()+
+  theme(legend.position = "right")
+
+
+by_time_2031up5236sec <- cyclis_2031up5236sec_durgroup %>% 
+  group_by(year(started_at),month(started_at,label=TRUE),day(started_at),
+           wday(started_at, label=TRUE),member_casual) %>% 
+  summarise(total_user=n())
+colnames(by_time_2031up5236sec)<-c("year","month","day_of_month","day_of_week","cat_user","total_user")
+head(by_time_2031up5236sec)
+by_mean_time_2031up5236sec <- by_time_2031up5236sec %>% 
+  group_by(day_of_week,cat_user) %>% summarise(average=mean(total_user))
+ggplot(by_mean_time_2031up5236sec, aes(day_of_week,average,group=cat_user))+
+  geom_col(aes(fill=cat_user), position = "dodge")+
+  geom_text(aes(y=average,label=round(average)),vjust=0,position=position_nudge(0), color="white",size=4)+
+  ggtitle("Cyclistic User Average by Week Days","2031 - 5236 second")+
+  theme_dark()+
+  theme(legend.position = "right")
+
+
+by_time_21490up107722sec <- cyclis_21490up107722sec_durtime %>% 
+  group_by(year(started_at),month(started_at,label=TRUE),day(started_at),
+           wday(started_at, label=TRUE),member_casual) %>% 
+  summarise(total_user=n())
+colnames(by_time_21490up107722sec)<-c("year","month","day_of_month","day_of_week","cat_user","total_user")
+head(by_mean_time_21490up107722sec)
+by_mean_time_21490up107722sec <- by_time_21490up107722sec %>% 
+  group_by(day_of_week,cat_user) %>% summarise(average=mean(total_user))
+ggplot(by_mean_time_21490up107722sec, aes(day_of_week,average,group=cat_user))+
+  geom_col(aes(fill=cat_user), position = "dodge")+
+  geom_text(aes(y=average,label=round(average)),vjust=0,position=position_nudge(0), color="white",size=4)+
+  ggtitle("Cyclistic User Average by Week Days","21490 - 107722 second")+
+  theme_dark()+
+  theme(legend.position = "right")
+
+
+
+
+
+
+# Analsis of cyclistic user by time
+by_clock_8365up14120sec <-cyclis_8365up14120sec_durtime %>% 
+  group_by(format(as.POSIXct(cyclis_8365up14120sec_durtime$started_at),format="%H")) %>%
+  summarise(member_user=sum(member_casual=='member'),casual_user=sum(member_casual=='casual'))
+head(cyclis_8365up14120sec_durtime)
+colnames(cyclis_8365up14120sec_durtime)<- c('rideable_type','started_at','ended_at','member_casual','cyclis_dur')
+head(by_clock_8365up14120sec)
+colnames(by_clock_8365up14120sec)<- c("time","member_user","casual_user")
+install.packages("patchwork")
+library(patchwork)
+member_clock_8365 <- ggplot(by_clock_8365up14120sec)+
+  geom_col(aes(x=time,y=member_user),fill="blue")
+casual_clock_8365 <- ggplot(by_clock_8365up14120sec)+
+  geom_col(aes(time,casual_user), fill="magenta")
+by_clock_plot_8365up14120sec <- member_clock_8365+casual_clock_8365
+
+
+
+by_clock_1up1952sec <-cyclis_1up1952sec_durgroup %>% 
+  group_by(format(as.POSIXct(cyclis_1up1952sec_durgroup$started_at),format="%H")) %>%
+  summarise(member_user=sum(member_casual=='member'),casual_user=sum(member_casual=='casual'))
+head(by_clock_1up1952sec)
+colnames(by_clock_1up1952sec)<- c("time","member_user","casual_user")
+member_1up1952sec <- ggplot(by_clock_1up1952sec, aes(x=time))+
+  geom_col(aes(y=member_user),fill="blue")
+casual_1up1952sec <- ggplot(by_clock_1up1952sec, aes(x=time))+
+  geom_col(aes(y=casual_user),fill="magenta")
+
+member_1up1952sec + casual_1up1952sec
+
+
+
+
+by_clock_2031up523sec <-cyclis_2031up5236sec_durgroup %>% 
+  group_by(format(as.POSIXct(cyclis_2031up5236sec_durgroup$started_at),format="%H")) %>%
+  summarise(member_user=sum(member_casual=='member'),casual_user=sum(member_casual=='casual'))
+head(by_clock_2031up523sec)
+colnames(by_clock_2031up523sec)<- c("time","member_user","casual_user")
+member_2031up523sec <- ggplot(by_clock_2031up523sec, aes(x=time))+
+  geom_col(aes(y=member_user),fill="blue")
+casual_2031up523sec <- ggplot(by_clock_2031up523sec, aes(x=time))+
+  geom_col(aes(y=casual_user),fill="magenta")
+
+
+
+by_clock_21490up107722sec <-cyclis_21490up107722sec_durtime %>% 
+  group_by(format(as.POSIXct(cyclis_21490up107722sec_durtime$started_at),format="%H")) %>%
+  summarise(member_user=sum(member_casual=='member'),casual_user=sum(member_casual=='casual'))
+head(by_clock_21490up107722sec)
+colnames(by_clock_21490up107722sec)<- c("time","member_user","casual_user")
+member_21490up107722 <- ggplot(by_clock_21490up107722sec, aes(x=time))+
+  geom_col(aes(y=member_user),fill="blue")
+casual_21490up107722 <- ggplot(by_clock_21490up107722sec, aes(x=time))+
+  geom_col(aes(y=casual_user),fill="magenta")
+
+by_clock_plot_21490up107722 <- member_21490up107722+casual_21490up107722
+by_clock_plot_1up1952 <- member_1up1952sec+casual_1up1952sec
+by_clock_plot_2031up5236 <- member_2031up523sec+casual_2031up523sec
+by_clock_plot_8365up14120sec
